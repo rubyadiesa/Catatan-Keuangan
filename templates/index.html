@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Catatan Uang Harian</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{# Tanda {% %} dan {{ }} adalah "bahasa Python di dalam HTML" (Jinja).
+   {% for %} = looping, {% if %} = if else, {{ }} = tampilkan isi variabel. #}
+
+<header>
+  <h1>Catatan Uang Harian</h1>
+  <p>Saldo sekarang</p>
+  <div class="saldo-besar">{{ saldo | rupiah }}</div>
+  <div class="ringkas">
+    <span class="masuk">Pemasukan {{ total_masuk | rupiah }}</span>
+    <span class="keluar">Pengeluaran {{ total_keluar | rupiah }}</span>
+  </div>
+</header>
+
+<main>
+
+{# Pesan peringatan dari Python (flash) #}
+{% for pesan in get_flashed_messages() %}
+  <div class="peringatan">{{ pesan }}</div>
+{% endfor %}
+
+{# ===== KANTONG ===== #}
+<section>
+  <h2>Kantong</h2>
+  <div class="daftar-kantong">
+    {% for k in kantong %}
+      <div class="kantong">
+        <b>{{ k.nama }}</b>
+        <div class="angka">{{ k.saldo | rupiah }}</div>
+        {# Kalau kantong tabungan, tampilkan progres goal #}
+        {% if k.tipe == "tabungan" %}
+          <div class="bar"><div class="isi" style="width: {{ k.persen }}%"></div></div>
+          <small>{{ k.persen }}% dari goal {{ k.target | rupiah }}</small>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="dua-kolom">
+    <form method="post" action="/kantong">
+      <h3>Buat kantong baru</h3>
+      <input name="nama" placeholder="Nama kantong, misal: Laptop Baru" required>
+      <select name="tipe" id="tipe" onchange="tampilkanTarget()">
+        <option value="biasa">Kantong biasa</option>
+        <option value="tabungan">Kantong tabungan (ada goal)</option>
+      </select>
+      <input name="target" id="target" type="number" min="1" placeholder="Goal / target tabungan (Rp)">
+      <input name="saldo_awal" type="number" min="0" placeholder="Saldo awal (Rp), boleh kosong">
+      <button>Buat kantong</button>
+    </form>
+
+    <form method="post" action="/tambah-uang">
+      <h3>Tambah uang ke kantong</h3>
+      <select name="kantong_id">
+        {% for k in kantong %}<option value="{{ k.id }}">{{ k.nama }}</option>{% endfor %}
+      </select>
+      <input name="jumlah" type="number" min="1" placeholder="Jumlah uang (Rp)" required>
+      <button>Tambah uang</button>
+    </form>
+  </div>
+</section>
+
+{# ===== TRANSAKSI ===== #}
+<section>
+  <h2>Transaksi</h2>
+  <form method="post" action="/transaksi" class="form-transaksi">
+    <select name="jenis" id="jenis" onchange="isiKategori()">
+      <option value="pengeluaran">Pengeluaran</option>
+      <option value="pemasukan">Pemasukan</option>
+    </select>
+    <select name="kategori" id="kategori"></select>   {# diisi oleh JavaScript #}
+    <select name="kantong_id">
+      {% for k in kantong %}<option value="{{ k.id }}">{{ k.nama }}</option>{% endfor %}
+    </select>
+    <input name="jumlah" type="number" min="1" placeholder="Jumlah (Rp)" required>
+    <input name="tanggal" type="date" value="{{ hari_ini }}" required>
+    <input name="catatan" placeholder="Catatan (boleh kosong)">
+    <button>Simpan transaksi</button>
+  </form>
+
+  {% if transaksi | length == 0 %}
+    <p class="kosong">Belum ada transaksi. Isi form di atas untuk mencatat yang pertama.</p>
+  {% else %}
+    <div class="geser">
+    <table>
+      <tr><th>Tanggal</th><th>Kategori</th><th>Kantong</th><th>Catatan</th><th>Jumlah</th><th></th></tr>
+      {% for t in transaksi %}
+        <tr>
+          <td>{{ t.tanggal }}</td>
+          <td>{{ t.kategori }}</td>
+          <td>{{ t.kantong }}</td>
+          <td>{{ t.catatan }}</td>
+          {# Warna jumlah beda: hijau kalau pemasukan, merah kalau pengeluaran #}
+          {% if t.jenis == "pemasukan" %}
+            <td class="masuk">+ {{ t.jumlah | rupiah }}</td>
+          {% else %}
+            <td class="keluar">- {{ t.jumlah | rupiah }}</td>
+          {% endif %}
+          <td>
+            <form method="post" action="/hapus/{{ t.id }}" onsubmit="return konfirmasiHapus()">
+              <button class="hapus">Hapus</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    </div>
+  {% endif %}
+</section>
+
+{# ===== CASHFLOW ===== #}
+<section>
+  <h2>Cashflow per bulan</h2>
+  {% for c in cashflow %}
+    <div class="bulan">
+      <b>{{ c.nama }}</b>
+      <div class="batang masuk-bg" style="width: {{ c.lebar_masuk }}%">Masuk {{ c.masuk | rupiah }}</div>
+      <div class="batang keluar-bg" style="width: {{ c.lebar_keluar }}%">Keluar {{ c.keluar | rupiah }}</div>
+      <small>Selisih bulan ini: {{ c.bersih | rupiah }}</small>
+    </div>
+  {% else %}
+    <p class="kosong">Cashflow muncul setelah ada transaksi.</p>
+  {% endfor %}
+</section>
+
+</main>
+
+{# Kirim list kategori dari Python ke JavaScript, lalu panggil file script.js #}
+<script>
+  var KATEGORI_KELUAR = {{ kategori_keluar | tojson }};
+  var KATEGORI_MASUK = {{ kategori_masuk | tojson }};
+</script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
