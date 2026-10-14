@@ -1,3 +1,7 @@
+# ===== app.py : "otak" website (backend) =====
+# VERSI 2: tiap pengunjung punya data sendiri. Pengunjung dikenali lewat "cookie"
+# (kode unik yang disimpan di browser). Pengunjung baru selalu mulai dari Rp 0.
+
 from flask import Flask, render_template, request, redirect, flash, make_response
 import json, os, uuid
 from datetime import date
@@ -5,12 +9,20 @@ from datetime import date
 app = Flask(__name__)
 app.secret_key = "belajar-flask"
 
+# ---------- VARIABEL & LIST ----------
+NAMA_BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+KATEGORI_KELUAR = ["Makan", "Transportasi", "Groceries", "Amal", "Tagihan", "Hiburan", "Pendidikan", "Lainnya"]
+KATEGORI_MASUK = ["Gaji", "Uang Saku", "Hadiah", "Lainnya"]
+
+# Folder tempat file data pengunjung. Di Vercel hanya folder /tmp yang boleh ditulis.
 if os.environ.get("VERCEL"):
     FOLDER_DATA = "/tmp/data"
 else:
     FOLDER_DATA = "data"
 os.makedirs(FOLDER_DATA, exist_ok=True)     # buat folder kalau belum ada
 
+
+# ---------- FUNCTION: pengenal pengunjung ----------
 def id_valid(id_user):
     # KEAMANAN: kode pengunjung harus 32 karakter, isinya hanya 0-9 dan a-f.
     # Tanpa ini, orang jahat bisa mengisi cookie dengan nama file lain di server.
@@ -34,6 +46,8 @@ def lokasi_file(id_user):
     # Tiap pengunjung punya file sendiri, misal: data/3f9a....json
     return os.path.join(FOLDER_DATA, id_user + ".json")
 
+
+# ---------- FUNCTION: baca & simpan data ----------
 def format_rupiah(angka):
     return "Rp " + f"{angka:,}".replace(",", ".")     # 1500000 -> "Rp 1.500.000"
 
@@ -53,6 +67,10 @@ def simpan_data(id_user, data):
     with open(lokasi_file(id_user), "w") as f:
         json.dump(data, f, indent=2)
 
+
+# ---------- FUNCTION: hitung-hitungan ----------
+# PERUBAHAN: sekarang semua function menerima "data" lewat parameter,
+# karena tiap pengunjung punya data berbeda (tidak ada lagi satu data untuk semua).
 
 def buat_id_baru(daftar):
     terbesar = 0
@@ -132,6 +150,8 @@ def buat_cashflow(data):
     return hasil
 
 
+# ---------- HALAMAN UTAMA ----------
+@app.route("/")
 def beranda():
     id_user = ambil_id_pengguna()
     pengunjung_baru = False
@@ -172,6 +192,11 @@ def beranda():
         halaman.set_cookie("id_pengguna", id_user, max_age=60 * 60 * 24 * 365,
                            httponly=True, samesite="Lax")
     return halaman
+
+
+# ---------- MENERIMA DATA DARI FORM ----------
+# Setiap route di bawah dimulai dengan cara yang sama:
+# 1) cari tahu siapa pengunjungnya  2) baca datanya  3) proses  4) simpan
 
 @app.route("/kantong", methods=["POST"])
 def tambah_kantong():
